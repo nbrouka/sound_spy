@@ -3,11 +3,13 @@
 
 Этот модуль является "сердцем" игры. Он:
     1. Инициализирует Pygame и создаёт окно
-    2. Управляет состояниями игры (меню, игра, экран завершения)
-    3. Обрабатывает пользовательский ввод (клавиатура)
-    4. Обновляет состояние всех игровых объектов
-    5. Отрисовывает все элементы на экране
-    6. Контролирует таймер и условия победы/поражения
+    2. Загружает конфигурацию уровня из spy_level.json
+    3. Управляет состояниями игры (меню, игра, ввод имени, экран завершения)
+    4. Обрабатывает пользовательский ввод (клавиатура)
+    5. Обновляет состояние всех игровых объектов
+    6. Ведёт логирование событий в game_flight.log
+    7. Сохраняет результаты в agent_logs.csv
+    8. Контролирует таймер и условия победы/поражения
 
 Игровой цикл работает по принципу "requestAnimationFrame":
     - Обработка событий (events)
@@ -30,12 +32,15 @@ from py_sound_spy.constants import (
     GAME_MESSAGES,
     WALK_RADIUS,
     RUN_RADIUS,
+    LEVEL_MATRIX,
 )
 from py_sound_spy.level import get_tile_at, draw_level
 from py_sound_spy.sound_wave import SoundWave
 from py_sound_spy.agent import Agent
 from py_sound_spy.blind_guard import BlindGuard
-from py_sound_spy.ui import draw_menu, draw_overlay_message, draw_danger_indicator, draw_game_over_screen
+from py_sound_spy.ui import draw_menu, draw_overlay_message, draw_danger_indicator, draw_game_over_screen, draw_text_centered
+from py_sound_spy.data_io import load_level_config, setup_logging, log_event, save_session
+from pathlib import Path
 
 
 def main():
@@ -43,13 +48,16 @@ def main():
     Основной игровой цикл.
 
     Состояния игры:
-        MENU   - стартовый экран с правилами и легендой
-        PLAY   - активный игровой процесс
-        OVER   - экран завершения (победа/поражение)
+        MENU       - стартовый экран с правилами и легендой
+        PLAY       - активный игровой процесс
+        NAME_INPUT - ввод имени игрока после завершения игры
+        OVER       - экран завершения (победа/поражение)
 
     Логика работы:
-        1. Бесконечный цикл while True
-        2. На каждой итерации:
+        1. Загрузка конфигурации уровня из spy_level.json
+        2. Настройка логирования
+        3. Бесконечный цикл while True
+        4. На каждой итерации:
             a. Обработка событий (закрытие окна, нажатия клавиш)
             b. Обновление состояния игры в зависимости от текущего state
             c. Отрисовка соответствующего экрана
@@ -72,101 +80,129 @@ def main():
     big_font = pygame.font.Font(None, 52)  # крупный шрифт (заголовки, сообщения)
 
     # ============================================================
+    # Загрузка конфигурации уровня
+    # ============================================================
+    config_path = Path(__file__).with_name("spy_level.json")
+    try:
+        config = load_level_config(config_path)
+        print(f"Уровень загружен из {config_path}")
+    except Exception as e:
+        print(f"Ошибка загрузки уровня: {e}. Используются значения по умолчанию.")
+        config = {}
+
+    # Обновляем константы из конфигурации, если она загружена
+    if config:
+        if "level" in config:
+            LEVEL_MATRIX[:] = config["level"]
+        if "walls" in config:
+            WALLS[:] = [pygame.Rect(w["x"], w["y"], w["w"], w["h"]) for w in config["walls"]]
+
+    # ============================================================
+    # Настройка логирования
+    # ============================================================
+    log_path = Path(__file__).with_name("game_flight.log")
+    setup_logging(log_path)
+    log_event("Игра запущена")
+
+    # ============================================================
     # Переменные состояния игры
     # ============================================================
-    # Текущее состояние игрового цикла (MENU/PLAY/OVER)
     state = "MENU"
 
-    # Флаг победы (True) или поражения (False)
     win = False
-
-    # Флаг окончания игры (True когда игра завершена)
     game_over = False
-
-    # Объект охранника, который поймал агента (или None)
     caught_by = None
-
-    # Флаг истечения времени (True если время вышло)
     timeout_reason = False
-
-    # Время начала игры в миллисекундах (для таймера)
     start_ticks = 0
+    alerts_raised = 0
 
-    # Игровые объекты (создаются при старте игры)
-    guards = []   # список охранников
-    waves = []    # список активных звуковых волн
-    agent = None  # объект агента
+    guards = []
+    waves = []
+    agent = None
+
+    player_name = ""
+    input_text = ""
 
     # ============================================================
     # Главный игровой цикл
     # ============================================================
     while True:
-        # Текущее время в миллисекундах (для таймера и кулдаунов)
         now = pygame.time.get_ticks()
 
         # --------------------------------------------------------
         # 1. Обработка событий
         # --------------------------------------------------------
         for event in pygame.event.get():
-            # Закрытие окна - завершение программы
             if event.type == pygame.QUIT:
+                log_event("Игра закрыта")
                 pygame.quit()
                 sys.exit()
 
-            # Обработка нажатий клавиш
             if event.type == pygame.KEYDOWN:
-                # В меню: любая клавиша начинает игру
                 if state == "MENU":
                     state = "PLAY"
                     start_ticks = pygame.time.get_ticks()
                     agent = Agent(80, 80)
-                    guards = [
-                        BlindGuard([(200, 160), (400, 160), (400, 360), (200, 360)], 0),
-                        BlindGuard([(620, 120), (620, 320)], 0),
-                        BlindGuard([(160, 160), (160, 480), (360, 480), (360, 240)], 0),
-                    ]
+                    alerts_raised = 0
+
+                    if config and "guards" in config:
+                        guards = [
+                            BlindGuard([tuple(p) for p in g["route"]], 0)
+                            for g in config["guards"]
+                        ]
+                    else:
+                        guards = [
+                            BlindGuard([(200, 160), (400, 160), (400, 360), (200, 360)], 0),
+                            BlindGuard([(620, 120), (620, 320)], 0),
+                            BlindGuard([(160, 160), (160, 480), (360, 480), (360, 240)], 0),
+                        ]
                     waves = []
                     game_over = False
                     caught_by = None
                     timeout_reason = False
+                    log_event("Игра началась")
 
-                # На экране завершения: R возвращает в меню
+                elif state == "NAME_INPUT":
+                    if event.key == pygame.K_RETURN and input_text.strip():
+                        player_name = input_text.strip()
+                        csv_path = Path(__file__).with_name("agent_logs.csv")
+                        elapsed = (pygame.time.get_ticks() - start_ticks) / 1000
+                        status = "Победа" if win else "Поимка"
+                        save_session(csv_path, player_name, elapsed, alerts_raised, status)
+                        log_event(f"Результат сохранён: {player_name}, {elapsed:.1f}с, {status}")
+                        input_text = ""
+                        state = "OVER"
+                    elif event.key == pygame.K_BACKSPACE:
+                        input_text = input_text[:-1]
+                    elif event.key == pygame.K_r:
+                        input_text = ""
+                        state = "MENU"
+                    elif event.key < 256 and event.key >= 32:
+                        input_text += event.unicode
+
                 elif state == "OVER" and event.key == pygame.K_r:
-                    state = "MENU"
-
-                # Во время игры при поимке: R возвращает в меню
-                elif state == "PLAY" and game_over and caught_by is not None and event.key == pygame.K_r:
                     state = "MENU"
 
         # --------------------------------------------------------
         # 2. Обновление состояния и отрисовка
         # --------------------------------------------------------
-        # Используем match/case для обработки состояний игры
         match state:
             case "MENU":
-                # Отрисовываем стартовый экран
                 draw_menu(screen, font, big_font)
 
             case "PLAY":
-                # Вычисляем прошедшее и оставшееся время
                 elapsed = (now - start_ticks) / 1000
                 remaining = max(0, TIME_LIMIT_SECONDS - elapsed)
 
-                # Если игра не завершена - обрабатываем ввод
                 if not game_over:
-                    # Считываем состояние всех клавиш
                     keys = pygame.key.get_pressed()
-
-                    # Режим бега (зажатый Shift)
                     agent.running = keys[pygame.K_LSHIFT] or keys[pygame.K_RSHIFT]
 
-                    # Направления движения (стрелки или WASD)
                     up = keys[pygame.K_w] or keys[pygame.K_UP]
                     down = keys[pygame.K_s] or keys[pygame.K_DOWN]
                     left = keys[pygame.K_a] or keys[pygame.K_LEFT]
                     right = keys[pygame.K_d] or keys[pygame.K_RIGHT]
 
-                    # Пытаемся двинуться в выбранном направлении
                     moved = False
                     if up:
                         moved = agent.move(0, -1, WALLS)
@@ -177,52 +213,46 @@ def main():
                     elif right:
                         moved = agent.move(1, 0, WALLS)
 
-                    # Если движение было и прошёл кулдаун - создаём волну
+                    if moved:
+                        log_event(f"Агент совершил шаг в {agent.rect.center}")
+
                     if moved and now - agent.last_wave_time >= agent.wave_cooldown:
                         tile = get_tile_at(*agent.rect.center)
-                        # Радиус волны зависит от режима движения
                         max_radius = WALK_RADIUS if not agent.running else RUN_RADIUS
-                        # Металл усиливает шум в 2 раза
                         if tile == 1:
                             max_radius *= 2
                         waves.append(SoundWave(agent.rect.centerx, agent.rect.centery, max_radius=max_radius))
                         agent.last_wave_time = now
 
-                    # Обновляем все волны и удаляем неактивные
                     for wave in waves:
                         wave.update()
                     waves = [w for w in waves if w.active]
 
-                    # Обновляем охранников и проверяем, видят ли они агента
                     for guard in guards:
-                        if guard.update(waves, agent):
+                        prev_state = guard.state
+                        heard = guard.update(waves, agent)
+                        if guard.state == "Investigating" and prev_state != "Investigating":
+                            alerts_raised += 1
+                            log_event(f"Охранник услышал шум в {guard.rect.center}")
+                        if heard:
                             game_over = True
                             win = False
                             caught_by = guard
+                            log_event("Агент пойман охранником")
                             break
 
-                    # Если ещё не конец игры - проверяем столкновения
-                    if not game_over:
-                        for guard in guards:
-                            if agent.rect.colliderect(guard.rect):
-                                game_over = True
-                                win = False
-                                caught_by = guard
-                                break
-
-                    # Проверяем, достиг ли агент финиша
                     tile_under = get_tile_at(*agent.rect.center)
                     if tile_under == 2:
                         game_over = True
                         win = True
+                        log_event("Агент достиг финиша")
 
-                    # Проверяем, не истекло ли время
                     if remaining <= 0:
                         game_over = True
                         win = False
                         timeout_reason = True
+                        log_event("Время вышло")
 
-                # Отрисовываем игровое поле
                 draw_level(screen)
                 for wave in waves:
                     wave.draw(screen)
@@ -230,41 +260,53 @@ def main():
                     guard.draw(screen)
                 agent.draw(screen)
 
-                # Вычисляем уровень опасности от всех охранников
                 danger = 0.0
                 for guard in guards:
                     dist = (agent.rect.centerx - guard.rect.centerx) ** 2 + (agent.rect.centery - guard.rect.centery) ** 2
                     if dist < DANGER_RADIUS ** 2:
                         danger = max(danger, 1.0 - (dist ** 0.5) / DANGER_RADIUS)
 
-                # Если агент пойман - показываем overlay, иначе индикатор опасности
                 if caught_by is not None:
                     draw_overlay_message(screen, GAME_MESSAGES["caught"], font, big_font)
                 else:
                     draw_danger_indicator(screen, danger, font)
 
-                # Отрисовываем HUD (статус бега и таймер)
                 status_text = font.render(f"Shift: {GAME_MESSAGES['status_run'] if agent.running else GAME_MESSAGES['status_walk']}", True, COLORS["text"])
                 screen.blit(status_text, (30, 10))
 
                 time_text = font.render(f"Время: {remaining:0.1f}", True, COLORS["text"])
                 screen.blit(time_text, (WINDOW_WIDTH - time_text.get_width() - 30, 10))
 
-                # Если игра завершена и это не поимка - переходим в экран OVER
                 if game_over and caught_by is None:
-                    state = "OVER"
+                    state = "NAME_INPUT" if win else "OVER"
+                elif game_over and caught_by is not None:
+                    state = "NAME_INPUT"
+
+            case "NAME_INPUT":
+                draw_level(screen)
+                for wave in waves:
+                    wave.draw(screen)
+                for guard in guards:
+                    guard.draw(screen)
+                agent.draw(screen)
+
+                draw_overlay_message(screen, GAME_MESSAGES["caught"] if not win else GAME_MESSAGES["win"], font, big_font)
+
+                prompt = font.render("Введите имя и нажмите Enter:", True, COLORS["text"])
+                screen.blit(prompt, (WINDOW_WIDTH // 2 - prompt.get_width() // 2, WINDOW_HEIGHT // 2 + 40))
+
+                name_surf = font.render(input_text + "|", True, COLORS["alert"])
+                screen.blit(name_surf, (WINDOW_WIDTH // 2 - name_surf.get_width() // 2, WINDOW_HEIGHT // 2 + 80))
 
             case "OVER":
-                # Отрисовываем финальный экран
                 draw_game_over_screen(screen, win, timeout_reason, font, big_font)
 
         # --------------------------------------------------------
         # 3. Обновление дисплея и контроль FPS
         # --------------------------------------------------------
-        pygame.display.flip()  # показываем отрисованный кадр
-        clock.tick(FPS)        # ограничиваем FPS
+        pygame.display.flip()
+        clock.tick(FPS)
 
 
-# Стандартный Python-паттерн для скриптов
 if __name__ == "__main__":
     main()
