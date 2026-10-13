@@ -18,3 +18,9 @@ Thumbs.db
 # Sound Spy runtime-generated files
 game_flight.log
 agent_logs.csv
+
+# Telegram bot runtime files (LR3)
+py_bot/sessions/*.json
+py_bot/logs/*.log
+py_bot/data/agent_logs.csv
+py_bot/data/game_flight.log
