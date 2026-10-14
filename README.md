@@ -66,4 +66,4 @@ python3 bot.py
 |---|---|
 | Игра: механики, уровни, FSM охранников, скриншоты | [`py_sound_spy/README.md`](py_sound_spy/README.md) |
 | Бот: архитектура, команды, stateless-сессии, скриншоты | [`py_bot/README.md`](py_bot/README.md) |
-| 
+
