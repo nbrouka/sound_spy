@@ -1,0 +1,9 @@
+{
+  "name": "js_sound_spy",
+  "version": "1.0.0",
+  "description": "Порт игрового ядра Sound Spy на JavaScript (ES6+)",
+  "type": "module",
+  "scripts": {
+    "test": "node selftest.js"
+  }
+}
