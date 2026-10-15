@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sound Spy — веб-виджет на Canvas</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <h1>ЗВУКОВОЙ ШПИОН — веб-виджет</h1>
+    <p class="hint">
+        <code>WASD</code>/стрелки — движение, <code>Shift</code> — бег, <code>R</code> — рестарт.
+        Видимость ограничена радиусом вокруг агента; шум рисуется расширяющимися кругами.
+    </p>
+
+    <main class="layout">
+        <canvas id="game" width="800" height="600"></canvas>
+
+        <aside class="panel">
+            <h2>HUD</h2>
+            <div class="hud">
+                <span>Режим: <b id="mode">ХОДЬБА</b></span>
+                <span>Шагов: <b id="steps">0</b></span>
+                <span>Волн: <b id="waves">0</b></span>
+                <span>Тревог: <b id="alerts">0</b></span>
+                <span>Охранники: <b id="guards">—</b></span>
+            </div>
+
+            <h2>Вызываемые сценарии</h2>
+            <div class="scenarios">
+                <button data-scenario="loudWave">Громкая волна</button>
+                <button data-scenario="alarmAll">Тревога у всех</button>
+                <button data-scenario="calm">Штиль</button>
+                <button data-scenario="toggleFog">Туман вкл/выкл</button>
+                <button data-scenario="slowMotion">Замедление</button>
+                <button data-scenario="speedUp">Ускорение</button>
+                <button data-scenario="pause">Пауза</button>
+            </div>
+            <p class="note">
+                Те же сценарии вызываются из консоли браузера:<br>
+                <code>SoundSpy.scenarios.alarmAll()</code><br>
+                <code>SoundSpy.scenarios.loudWave(400, 300)</code>
+            </p>
+
+            <h2>Результат</h2>
+            <div id="result" class="result"></div>
+        </aside>
+    </main>
+
+    <script type="module" src="js/widget.js"></script>
+</body>
+</html>
