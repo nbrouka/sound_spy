@@ -65,6 +65,6 @@ SoundSpy.scenarios.restart();            // новая партия
 - [x] Анимированный индикатор тревоги над охранником в состоянии `Investigating`
 - [x] HUD: режим, шаги, волны, тревоги, состояния охранников
 - [x] Сценарии как модуль с реестром функций + `window.SoundSpy` API
-- [x] Логика — из ядра ЛР4 (`Game`, `Agent`, `BlindGuard`, `SoundWave`, `LabyrinthField`)
+- [x] Логика — из ядра (`Game`, `Agent`, `BlindGuard`, `SoundWave`, `LabyrinthField`)
 
 ![Веб-виджет](screenshots/widget.png)

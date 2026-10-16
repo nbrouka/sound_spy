@@ -7,7 +7,7 @@
  *   - отрисовка уровня в радиусе видимости, сущностей и звуковых волн;
  *   - вызов вызываемых сценариев (кнопки + консоль).
  *
- * Вся игровая логика — в ядре из ЛР4: ../js_sound_spy/js/*
+ * Вся игровая логика — в ядре: ../js_sound_spy/js/*
  */
 import { Game } from '../../js_sound_spy/js/game.js';
 import { LabyrinthField } from '../../js_sound_spy/js/labyrinth_field.js';
